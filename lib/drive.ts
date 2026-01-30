@@ -53,7 +53,7 @@ export const driveTools: Tool[] = [
 ]
 
 // Helper to format file size
-function formatFileSize(bytes: string | number | undefined): string {
+function formatFileSize(bytes: string | number | null | undefined): string {
   if (!bytes) return '不明'
   const size = typeof bytes === 'string' ? parseInt(bytes) : bytes
   if (size < 1024) return `${size} B`
