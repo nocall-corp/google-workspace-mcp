@@ -1,0 +1,31 @@
+{
+  "name": "google-workspace-mcp",
+  "version": "1.0.0",
+  "description": "Google Workspace MCP Server - Calendar, Gmail, Drive, Tasks",
+  "type": "module",
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch"
+  },
+  "keywords": [
+    "mcp",
+    "google",
+    "workspace",
+    "calendar",
+    "gmail",
+    "drive",
+    "tasks",
+    "vercel"
+  ],
+  "author": "nocall",
+  "license": "MIT",
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.25.1",
+    "googleapis": "^144.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.17.16",
+    "@vercel/node": "^5.0.2",
+    "typescript": "^5.8.2"
+  }
+}

@@ -1,0 +1,9 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "version": 2,
+  "buildCommand": "",
+  "routes": [
+    { "src": "/mcp", "dest": "/api/mcp" },
+    { "src": "/health", "dest": "/api/health" }
+  ]
+}
