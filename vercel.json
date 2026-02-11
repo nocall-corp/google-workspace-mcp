@@ -3,6 +3,11 @@
   "version": 2,
   "buildCommand": "",
   "routes": [
+    { "src": "/.well-known/oauth-protected-resource", "dest": "/api/well-known-oauth-protected-resource" },
+    { "src": "/.well-known/oauth-authorization-server", "dest": "/api/well-known-oauth-authorization-server" },
+    { "src": "/oauth/authorize", "dest": "/api/oauth-authorize" },
+    { "src": "/oauth/token", "dest": "/api/oauth-token" },
+    { "src": "/oauth/register", "dest": "/api/oauth-register" },
     { "src": "/mcp", "dest": "/api/mcp" },
     { "src": "/health", "dest": "/api/health" }
   ]
