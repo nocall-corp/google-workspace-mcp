@@ -81,6 +81,18 @@ class GoogleWorkspaceMCPServer {
 // Map to store transports by session ID
 const transports: { [sessionId: string]: StreamableHTTPServerTransport } = {}
 
+// Build base URL from request headers
+function getBaseUrl(req: VercelRequest): string {
+  const proto = (req.headers['x-forwarded-proto'] as string) || 'https'
+  const host =
+    (req.headers['x-forwarded-host'] as string) ||
+    (req.headers['host'] as string) ||
+    process.env.VERCEL_PROJECT_PRODUCTION_URL ||
+    process.env.VERCEL_URL ||
+    'localhost'
+  return `${proto}://${host}`
+}
+
 // Authentication helper
 function authenticate(req: VercelRequest, res: VercelResponse): boolean {
   if (requireAuth && authTokens.length === 0) {
@@ -106,6 +118,13 @@ function authenticate(req: VercelRequest, res: VercelResponse): boolean {
   const token = bearerToken || (typeof directToken === 'string' ? directToken : null)
 
   if (!token || !authTokens.includes(token)) {
+    const baseUrl = getBaseUrl(req)
+    // RFC 6750 + MCP Authorization spec: include WWW-Authenticate header
+    // pointing to the protected resource metadata so clients can discover OAuth
+    res.setHeader(
+      'WWW-Authenticate',
+      `Bearer resource_metadata="${baseUrl}/.well-known/oauth-protected-resource"`
+    )
     res.status(401).json({
       jsonrpc: '2.0',
       error: { code: -32001, message: 'Unauthorized' },
