@@ -1,7 +1,6 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js'
-import { isInitializeRequest } from '@modelcontextprotocol/sdk/types.js'
-import { randomUUID } from 'node:crypto'
+// isInitializeRequest and randomUUID removed: stateless mode does not need session management
 import { Server } from '@modelcontextprotocol/sdk/server/index.js'
 import { CallToolRequestSchema, ListToolsRequestSchema, Tool } from '@modelcontextprotocol/sdk/types.js'
 import { Transport } from '@modelcontextprotocol/sdk/shared/transport.js'
@@ -78,9 +77,6 @@ class GoogleWorkspaceMCPServer {
   }
 }
 
-// Map to store transports by session ID
-const transports: { [sessionId: string]: StreamableHTTPServerTransport } = {}
-
 // Build base URL from request headers
 function getBaseUrl(req: VercelRequest): string {
   const proto = (req.headers['x-forwarded-proto'] as string) || 'https'
@@ -151,44 +147,25 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   try {
     if (req.method === 'POST') {
-      const sessionId = req.headers['mcp-session-id'] as string | undefined
-      let transport: StreamableHTTPServerTransport
+      // Stateless mode: create a fresh transport per request
+      // Vercel serverless cannot persist in-memory sessions across invocations
+      const transport = new StreamableHTTPServerTransport({
+        sessionIdGenerator: undefined,
+      })
 
-      if (sessionId && transports[sessionId]) {
-        transport = transports[sessionId]
-      } else if (!sessionId && isInitializeRequest(req.body)) {
-        transport = new StreamableHTTPServerTransport({
-          sessionIdGenerator: () => randomUUID(),
-          onsessioninitialized: (sid) => {
-            transports[sid] = transport
-          },
-        })
-
-        transport.onclose = () => {
-          if (transport.sessionId) {
-            delete transports[transport.sessionId]
-          }
-        }
-
-        const mcpServer = new GoogleWorkspaceMCPServer()
-        await mcpServer.connect(transport)
-      } else {
-        res.status(400).json({
-          jsonrpc: '2.0',
-          error: { code: -32000, message: 'Bad Request: No valid session ID provided' },
-          id: null,
-        })
-        return
-      }
-
+      const mcpServer = new GoogleWorkspaceMCPServer()
+      await mcpServer.connect(transport)
       await transport.handleRequest(req as any, res as any, req.body)
-    } else if (req.method === 'GET' || req.method === 'DELETE') {
-      const sessionId = req.headers['mcp-session-id'] as string | undefined
-      if (!sessionId || !transports[sessionId]) {
-        res.status(400).send('Invalid or missing session ID')
-        return
-      }
-      await transports[sessionId].handleRequest(req as any, res as any)
+    } else if (req.method === 'GET') {
+      // SSE streaming not supported in stateless mode
+      res.status(405).json({
+        jsonrpc: '2.0',
+        error: { code: -32601, message: 'SSE not supported in stateless mode' },
+        id: null,
+      })
+    } else if (req.method === 'DELETE') {
+      // No sessions to delete in stateless mode
+      res.status(200).end()
     } else {
       res.status(405).json({
         jsonrpc: '2.0',
