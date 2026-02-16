@@ -90,6 +90,8 @@ Vercel ダッシュボードで以下の環境変数を設定:
 | `GOOGLE_SERVICE_ACCOUNT_KEY` | サービスアカウントの JSON キー（1行に整形） |
 | `GOOGLE_DELEGATED_USER` | 委任先ユーザーのメールアドレス（例: hayashi@nocall.ai） |
 | `MCP_AUTH_TOKEN` | MCP 認証トークン（任意の文字列） |
+| `SLACK_WEBHOOK_URL` | Slack Incoming Webhook の URL（未読通知用） |
+| `CRON_SECRET` | Vercel Cron 認証シークレット（任意の文字列） |
 
 **GOOGLE_SERVICE_ACCOUNT_KEY の設定方法:**
 
@@ -114,6 +116,58 @@ cat service-account-key.json | jq -c .
   }
 }
 ```
+
+## 定期未読メール確認（Slack通知）
+
+毎日 8:00、13:00、18:00（JST）に未読メールをチェックし、Slack に通知します。
+
+### セットアップ
+
+#### 1. Slack Incoming Webhook を作成
+
+1. [Slack API](https://api.slack.com/apps) にアクセス
+2. アプリを作成（または既存のアプリを使用）
+3. **Incoming Webhooks** を有効化
+4. **Add New Webhook to Workspace** をクリック
+5. 通知先チャンネル（例: #shogo-times）を選択
+6. Webhook URL をコピー
+
+#### 2. 環境変数を追加
+
+Vercel ダッシュボードで以下の環境変数を追加:
+
+| 変数名 | 説明 |
+|--------|------|
+| `SLACK_WEBHOOK_URL` | Slack Incoming Webhook の URL |
+| `CRON_SECRET` | Vercel Cron のシークレット（Vercel ダッシュボードの Settings > Environment Variables で自動生成可能） |
+
+#### 3. Vercel Pro プラン
+
+Cron Jobs を使用するには Vercel Pro プラン（またはそれ以上）が必要です。
+Hobby プランでは 1 日 1 回の cron のみサポートされています。
+
+### スケジュール
+
+| 時刻（JST） | 時刻（UTC） | 説明 |
+|-------------|-------------|------|
+| 08:00 | 23:00（前日） | 朝の未読チェック |
+| 13:00 | 04:00 | 昼の未読チェック |
+| 18:00 | 09:00 | 夕方の未読チェック |
+
+### 手動実行
+
+```bash
+# 手動でテスト実行
+curl https://your-domain.vercel.app/cron/unread-check \
+  -H "Authorization: Bearer YOUR_CRON_SECRET"
+```
+
+### Slack での操作
+
+通知を受け取った後、Cursor の MCP 経由で以下のような操作ができます：
+- 「メール ID: xxx の詳細を見せて」 → メール本文を確認
+- 「このメールに返信して」 → メール返信
+- 「既読にして」 → ラベル変更
 
 ## 使用例
 
