@@ -85,6 +85,8 @@ export async function executeDriveTool(
           q: query,
           pageSize: maxResults,
           orderBy,
+          supportsAllDrives: true,
+          includeItemsFromAllDrives: true,
           fields: 'files(id, name, mimeType, size, modifiedTime, createdTime, webViewLink, owners)',
         })
 
@@ -121,6 +123,8 @@ export async function executeDriveTool(
           q,
           pageSize: maxResults,
           orderBy: 'modifiedTime desc',
+          supportsAllDrives: true,
+          includeItemsFromAllDrives: true,
           fields: 'files(id, name, mimeType, size, modifiedTime, createdTime, webViewLink, owners)',
         })
 
@@ -147,6 +151,7 @@ export async function executeDriveTool(
 
         const response = await drive.files.get({
           fileId,
+          supportsAllDrives: true,
           fields: 'id, name, mimeType, size, modifiedTime, createdTime, webViewLink, webContentLink, description, owners, permissions, parents',
         })
 
@@ -184,6 +189,7 @@ export async function executeDriveTool(
         // First get file metadata to check mime type
         const metadata = await drive.files.get({
           fileId,
+          supportsAllDrives: true,
           fields: 'id, name, mimeType',
         })
 
