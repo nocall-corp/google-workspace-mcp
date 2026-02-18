@@ -42,6 +42,20 @@ export const gmailTools: Tool[] = [
     },
   },
   {
+    name: 'google_gmail_reply',
+    description: 'メールに返信します。元のメールのスレッドに紐づけて返信します。',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        message_id: { type: 'string', description: '返信元のメッセージID' },
+        body: { type: 'string', description: '返信本文' },
+        cc: { type: 'string', description: 'CC（カンマ区切り）' },
+        bcc: { type: 'string', description: 'BCC（カンマ区切り）' },
+      },
+      required: ['message_id', 'body'],
+    },
+  },
+  {
     name: 'google_gmail_list_labels',
     description: 'ラベル一覧を取得します。',
     inputSchema: {
@@ -77,6 +91,29 @@ function encodeEmail(to: string, subject: string, body: string, cc?: string, bcc
   
   if (cc) email += `Cc: ${cc}\r\n`
   if (bcc) email += `Bcc: ${bcc}\r\n`
+  
+  email += `\r\n${body}`
+  
+  return Buffer.from(email).toString('base64url')
+}
+
+// Helper to encode reply email to base64url
+function encodeReplyEmail(
+  to: string, 
+  subject: string, 
+  body: string, 
+  inReplyTo: string,
+  references: string,
+  cc?: string, 
+  bcc?: string
+): string {
+  const from = getImpersonatedUser()
+  let email = `From: ${from}\r\nTo: ${to}\r\nSubject: =?UTF-8?B?${Buffer.from(subject).toString('base64')}?=\r\nContent-Type: text/plain; charset=UTF-8\r\n`
+  
+  if (cc) email += `Cc: ${cc}\r\n`
+  if (bcc) email += `Bcc: ${bcc}\r\n`
+  if (inReplyTo) email += `In-Reply-To: ${inReplyTo}\r\n`
+  if (references) email += `References: ${references}\r\n`
   
   email += `\r\n${body}`
   
@@ -209,6 +246,70 @@ export async function executeGmailTool(
               スレッドID: response.data.threadId,
               宛先: to,
               件名: subject,
+            }, null, 2),
+          }],
+        }
+      }
+
+      case 'google_gmail_reply': {
+        const messageId = args?.message_id as string
+        const body = args?.body as string
+        const cc = args?.cc as string | undefined
+        const bcc = args?.bcc as string | undefined
+        
+        if (!messageId || !body) {
+          throw new Error('message_id and body are required')
+        }
+
+        // Get original message to extract headers
+        const originalMessage = await gmail.users.messages.get({
+          userId,
+          id: messageId,
+          format: 'metadata',
+          metadataHeaders: ['From', 'To', 'Subject', 'Message-ID', 'References'],
+        })
+
+        const headers = originalMessage.data.payload?.headers || []
+        const originalFrom = getHeader(headers, 'From')
+        const originalSubject = getHeader(headers, 'Subject')
+        const originalMessageId = getHeader(headers, 'Message-ID')
+        const originalReferences = getHeader(headers, 'References')
+        const threadId = originalMessage.data.threadId
+
+        // Build reply subject (add Re: if not present)
+        const replySubject = originalSubject.startsWith('Re:') 
+          ? originalSubject 
+          : `Re: ${originalSubject}`
+
+        // Build references header (original references + original message-id)
+        const references = originalReferences 
+          ? `${originalReferences} ${originalMessageId}`
+          : originalMessageId
+
+        // Extract email address from "Name <email>" format
+        const toMatch = originalFrom.match(/<([^>]+)>/)
+        const to = toMatch ? toMatch[1] : originalFrom
+
+        const raw = encodeReplyEmail(to, replySubject, body, originalMessageId, references, cc, bcc)
+
+        const response = await gmail.users.messages.send({
+          userId,
+          requestBody: { 
+            raw,
+            threadId: threadId || undefined,
+          },
+        })
+
+        return {
+          content: [{
+            type: 'text',
+            text: JSON.stringify({
+              メッセージ: '返信を送信しました',
+              id: response.data.id,
+              スレッドID: response.data.threadId,
+              宛先: to,
+              件名: replySubject,
+              返信元メッセージID: messageId,
             }, null, 2),
           }],
         }
