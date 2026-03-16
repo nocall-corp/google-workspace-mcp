@@ -1,5 +1,5 @@
 import { Tool } from '@modelcontextprotocol/sdk/types.js'
-import { getDriveClient } from './google-client.js'
+import { getDriveClient, getDriveWriteClient } from './google-client.js'
 import { Readable } from 'stream'
 
 // Drive tool definitions
@@ -268,6 +268,9 @@ export async function executeDriveTool(
         if (!fileName) throw new Error('file_name is required')
         if (!folderId) throw new Error('folder_id is required')
 
+        // Use write client for uploads
+        const driveWrite = getDriveWriteClient()
+
         // Download file from URL
         const headers: Record<string, string> = {}
         if (authHeader) {
@@ -284,7 +287,7 @@ export async function executeDriveTool(
         const buffer = Buffer.from(arrayBuffer)
 
         // Upload to Google Drive
-        const uploadResponse = await drive.files.create({
+        const uploadResponse = await driveWrite.files.create({
           requestBody: {
             name: fileName,
             parents: [folderId],

@@ -53,8 +53,14 @@ export function getGmailClient(): gmail_v1.Gmail {
   return google.gmail({ version: 'v1', auth })
 }
 
-// Drive API client
+// Drive API client (read-only)
 export function getDriveClient(): drive_v3.Drive {
+  const auth = createAuthClient(['https://www.googleapis.com/auth/drive.readonly'])
+  return google.drive({ version: 'v3', auth })
+}
+
+// Drive API client (read-write, for uploads)
+export function getDriveWriteClient(): drive_v3.Drive {
   const auth = createAuthClient(['https://www.googleapis.com/auth/drive'])
   return google.drive({ version: 'v3', auth })
 }
