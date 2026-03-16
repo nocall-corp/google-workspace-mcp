@@ -55,7 +55,7 @@ export function getGmailClient(): gmail_v1.Gmail {
 
 // Drive API client
 export function getDriveClient(): drive_v3.Drive {
-  const auth = createAuthClient(['https://www.googleapis.com/auth/drive.readonly'])
+  const auth = createAuthClient(['https://www.googleapis.com/auth/drive'])
   return google.drive({ version: 'v3', auth })
 }
 

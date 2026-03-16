@@ -1,5 +1,6 @@
 import { Tool } from '@modelcontextprotocol/sdk/types.js'
 import { getDriveClient } from './google-client.js'
+import { Readable } from 'stream'
 
 // Drive tool definitions
 export const driveTools: Tool[] = [
@@ -48,6 +49,21 @@ export const driveTools: Tool[] = [
         file_id: { type: 'string', description: 'ファイルID' },
       },
       required: ['file_id'],
+    },
+  },
+  {
+    name: 'google_drive_upload_file',
+    description: 'URLからファイルをダウンロードしてGoogle Driveにアップロードします。SlackファイルURLやその他のHTTPアクセス可能なURLに対応。',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        source_url: { type: 'string', description: 'アップロード元のURL（SlackファイルURLなど）' },
+        file_name: { type: 'string', description: 'アップロード先のファイル名' },
+        folder_id: { type: 'string', description: 'アップロード先のGoogle DriveフォルダID' },
+        mime_type: { type: 'string', description: 'ファイルのMIMEタイプ（省略時は自動判定）' },
+        auth_header: { type: 'string', description: '認証ヘッダー（例: "Bearer xoxb-xxx"）。SlackファイルURLの場合に必要' },
+      },
+      required: ['source_url', 'file_name', 'folder_id'],
     },
   },
 ]
@@ -236,6 +252,65 @@ export async function executeDriveTool(
               MIMEタイプ: mimeType,
               内容: displayContent,
               切り詰め: truncated,
+            }, null, 2),
+          }],
+        }
+      }
+
+      case 'google_drive_upload_file': {
+        const sourceUrl = args?.source_url as string
+        const fileName = args?.file_name as string
+        const folderId = args?.folder_id as string
+        const mimeType = args?.mime_type as string | undefined
+        const authHeader = args?.auth_header as string | undefined
+
+        if (!sourceUrl) throw new Error('source_url is required')
+        if (!fileName) throw new Error('file_name is required')
+        if (!folderId) throw new Error('folder_id is required')
+
+        // Download file from URL
+        const headers: Record<string, string> = {}
+        if (authHeader) {
+          headers['Authorization'] = authHeader
+        }
+
+        const downloadResponse = await fetch(sourceUrl, { headers })
+        if (!downloadResponse.ok) {
+          throw new Error(`ファイルのダウンロードに失敗: ${downloadResponse.status} ${downloadResponse.statusText}`)
+        }
+
+        const contentType = mimeType || downloadResponse.headers.get('content-type') || 'application/octet-stream'
+        const arrayBuffer = await downloadResponse.arrayBuffer()
+        const buffer = Buffer.from(arrayBuffer)
+
+        // Upload to Google Drive
+        const uploadResponse = await drive.files.create({
+          requestBody: {
+            name: fileName,
+            parents: [folderId],
+          },
+          media: {
+            mimeType: contentType,
+            body: Readable.from(buffer),
+          },
+          supportsAllDrives: true,
+          fields: 'id, name, mimeType, size, webViewLink',
+        })
+
+        const uploadedFile = uploadResponse.data
+
+        return {
+          content: [{
+            type: 'text',
+            text: JSON.stringify({
+              成功: true,
+              ファイル: {
+                id: uploadedFile.id,
+                名前: uploadedFile.name,
+                MIMEタイプ: uploadedFile.mimeType,
+                サイズ: formatFileSize(uploadedFile.size),
+                リンク: uploadedFile.webViewLink,
+              },
             }, null, 2),
           }],
         }
