@@ -9,7 +9,7 @@ import { Transport } from '@modelcontextprotocol/sdk/shared/transport.js'
 import { calendarTools, executeCalendarTool } from '../lib/calendar.js'
 import { gmailTools, executeGmailTool } from '../lib/gmail.js'
 import { driveTools, executeDriveTool } from '../lib/drive.js'
-import { tasksTools, executeTasksTool } from '../lib/tasks.js'
+// Tasks removed: Claude API rejects oneOf/allOf schemas & tasks not used (Notion todo preferred)
 
 // Auth configuration
 const authTokens = [process.env.MCP_AUTH_TOKEN, process.env.AUTH_TOKEN].filter(
@@ -19,12 +19,11 @@ const requireAuth =
   process.env.REQUIRE_AUTH === 'true' ||
   (process.env.REQUIRE_AUTH !== 'false' && process.env.VERCEL_ENV === 'production')
 
-// All tools combined
+// All tools combined (tasks removed to avoid Claude API schema errors)
 const allTools: Tool[] = [
   ...calendarTools,
   ...gmailTools,
   ...driveTools,
-  ...tasksTools,
 ]
 
 // Tool executor router
@@ -39,8 +38,6 @@ async function executeTool(
     return executeGmailTool(name, args)
   } else if (name.startsWith('google_drive_')) {
     return executeDriveTool(name, args)
-  } else if (name.startsWith('google_tasks_')) {
-    return executeTasksTool(name, args)
   } else {
     return {
       content: [{ type: 'text', text: JSON.stringify({ エラー: `Unknown tool: ${name}` }, null, 2) }],
