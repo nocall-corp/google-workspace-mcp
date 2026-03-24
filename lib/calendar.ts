@@ -1,5 +1,5 @@
 import { Tool } from '@modelcontextprotocol/sdk/types.js'
-import { getCalendarClient, getImpersonatedUser } from './google-client.js'
+import { getCalendarClientForUser } from './google-client.js'
 
 // Calendar tool definitions
 export const calendarTools: Tool[] = [
@@ -14,6 +14,7 @@ export const calendarTools: Tool[] = [
         time_max: { type: 'string', description: '終了日時（ISO8601形式）' },
         max_results: { type: 'number', description: '取得件数（デフォルト: 20）', default: 20 },
         query: { type: 'string', description: 'フリーテキスト検索' },
+        user_email: { type: 'string', description: 'アクセス対象のメールアドレス（@nocall.aiドメイン限定）。省略時は hayashi@nocall.ai' },
       },
     },
   },
@@ -25,6 +26,7 @@ export const calendarTools: Tool[] = [
       properties: {
         calendar_id: { type: 'string', description: 'カレンダーID（デフォルト: primary）' },
         event_id: { type: 'string', description: 'イベントID' },
+        user_email: { type: 'string', description: 'アクセス対象のメールアドレス（@nocall.aiドメイン限定）。省略時は hayashi@nocall.ai' },
       },
       required: ['event_id'],
     },
@@ -43,6 +45,7 @@ export const calendarTools: Tool[] = [
         end_time: { type: 'string', description: '終了日時（ISO8601形式）' },
         attendees: { type: 'array', items: { type: 'string' }, description: '参加者のメールアドレス配列' },
         send_notifications: { type: 'boolean', description: '参加者に通知を送信するか（デフォルト: true）' },
+        user_email: { type: 'string', description: 'アクセス対象のメールアドレス（@nocall.aiドメイン限定）。省略時は hayashi@nocall.ai' },
       },
       required: ['summary', 'start_time', 'end_time'],
     },
@@ -61,6 +64,7 @@ export const calendarTools: Tool[] = [
         start_time: { type: 'string', description: '開始日時（ISO8601形式）' },
         end_time: { type: 'string', description: '終了日時（ISO8601形式）' },
         attendees: { type: 'array', items: { type: 'string' }, description: '参加者のメールアドレス配列' },
+        user_email: { type: 'string', description: 'アクセス対象のメールアドレス（@nocall.aiドメイン限定）。省略時は hayashi@nocall.ai' },
       },
       required: ['event_id'],
     },
@@ -74,6 +78,7 @@ export const calendarTools: Tool[] = [
         calendar_id: { type: 'string', description: 'カレンダーID（デフォルト: primary）' },
         event_id: { type: 'string', description: 'イベントID' },
         send_notifications: { type: 'boolean', description: '参加者に通知を送信するか（デフォルト: true）' },
+        user_email: { type: 'string', description: 'アクセス対象のメールアドレス（@nocall.aiドメイン限定）。省略時は hayashi@nocall.ai' },
       },
       required: ['event_id'],
     },
@@ -83,7 +88,9 @@ export const calendarTools: Tool[] = [
     description: 'アクセス可能なカレンダー一覧を取得します。',
     inputSchema: {
       type: 'object',
-      properties: {},
+      properties: {
+        user_email: { type: 'string', description: 'アクセス対象のメールアドレス（@nocall.aiドメイン限定）。省略時は hayashi@nocall.ai' },
+      },
     },
   },
 ]
@@ -93,7 +100,8 @@ export async function executeCalendarTool(
   name: string,
   args: Record<string, unknown> | undefined
 ): Promise<{ content: Array<{ type: string; text: string }>; isError?: boolean }> {
-  const calendar = getCalendarClient()
+  const userEmail = args?.user_email as string | undefined
+  const calendar = getCalendarClientForUser(userEmail)
   const defaultCalendarId = 'primary'
 
   try {

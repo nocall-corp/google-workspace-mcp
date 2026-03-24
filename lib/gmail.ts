@@ -1,5 +1,5 @@
 import { Tool } from '@modelcontextprotocol/sdk/types.js'
-import { getGmailClient, getImpersonatedUser } from './google-client.js'
+import { getGmailClientForUser, getImpersonatedUser } from './google-client.js'
 
 // Gmail tool definitions
 export const gmailTools: Tool[] = [
@@ -11,6 +11,7 @@ export const gmailTools: Tool[] = [
       properties: {
         query: { type: 'string', description: '検索クエリ（例: "from:example@example.com newer_than:7d"）' },
         max_results: { type: 'number', description: '取得件数（デフォルト: 20）', default: 20 },
+        user_email: { type: 'string', description: 'アクセス対象のメールアドレス（@nocall.aiドメイン限定）。省略時は hayashi@nocall.ai' },
       },
       required: ['query'],
     },
@@ -22,6 +23,7 @@ export const gmailTools: Tool[] = [
       type: 'object',
       properties: {
         message_id: { type: 'string', description: 'メッセージID' },
+        user_email: { type: 'string', description: 'アクセス対象のメールアドレス（@nocall.aiドメイン限定）。省略時は hayashi@nocall.ai' },
       },
       required: ['message_id'],
     },
@@ -37,6 +39,7 @@ export const gmailTools: Tool[] = [
         body: { type: 'string', description: '本文' },
         cc: { type: 'string', description: 'CC（カンマ区切り）' },
         bcc: { type: 'string', description: 'BCC（カンマ区切り）' },
+        user_email: { type: 'string', description: '送信元メールアドレス（@nocall.aiドメイン限定）。省略時は hayashi@nocall.ai' },
       },
       required: ['to', 'subject', 'body'],
     },
@@ -51,6 +54,7 @@ export const gmailTools: Tool[] = [
         body: { type: 'string', description: '返信本文' },
         cc: { type: 'string', description: 'CC（カンマ区切り）' },
         bcc: { type: 'string', description: 'BCC（カンマ区切り）' },
+        user_email: { type: 'string', description: '送信元メールアドレス（@nocall.aiドメイン限定）。省略時は hayashi@nocall.ai' },
       },
       required: ['message_id', 'body'],
     },
@@ -60,7 +64,9 @@ export const gmailTools: Tool[] = [
     description: 'ラベル一覧を取得します。',
     inputSchema: {
       type: 'object',
-      properties: {},
+      properties: {
+        user_email: { type: 'string', description: 'アクセス対象のメールアドレス（@nocall.aiドメイン限定）。省略時は hayashi@nocall.ai' },
+      },
     },
   },
   {
@@ -72,6 +78,7 @@ export const gmailTools: Tool[] = [
         message_id: { type: 'string', description: 'メッセージID' },
         add_labels: { type: 'array', items: { type: 'string' }, description: '追加するラベルID' },
         remove_labels: { type: 'array', items: { type: 'string' }, description: '削除するラベルID' },
+        user_email: { type: 'string', description: 'アクセス対象のメールアドレス（@nocall.aiドメイン限定）。省略時は hayashi@nocall.ai' },
       },
       required: ['message_id'],
     },
@@ -85,38 +92,37 @@ function decodeBase64Url(data: string): string {
 }
 
 // Helper to encode email to base64url
-function encodeEmail(to: string, subject: string, body: string, cc?: string, bcc?: string): string {
-  const from = getImpersonatedUser()
-  let email = `From: ${from}\r\nTo: ${to}\r\nSubject: =?UTF-8?B?${Buffer.from(subject).toString('base64')}?=\r\nContent-Type: text/plain; charset=UTF-8\r\n`
-  
+function encodeEmail(to: string, subject: string, body: string, fromEmail: string, cc?: string, bcc?: string): string {
+  let email = `From: ${fromEmail}\r\nTo: ${to}\r\nSubject: =?UTF-8?B?${Buffer.from(subject).toString('base64')}?=\r\nContent-Type: text/plain; charset=UTF-8\r\n`
+
   if (cc) email += `Cc: ${cc}\r\n`
   if (bcc) email += `Bcc: ${bcc}\r\n`
-  
+
   email += `\r\n${body}`
-  
+
   return Buffer.from(email).toString('base64url')
 }
 
 // Helper to encode reply email to base64url
 function encodeReplyEmail(
-  to: string, 
-  subject: string, 
-  body: string, 
+  to: string,
+  subject: string,
+  body: string,
   inReplyTo: string,
   references: string,
-  cc?: string, 
+  fromEmail: string,
+  cc?: string,
   bcc?: string
 ): string {
-  const from = getImpersonatedUser()
-  let email = `From: ${from}\r\nTo: ${to}\r\nSubject: =?UTF-8?B?${Buffer.from(subject).toString('base64')}?=\r\nContent-Type: text/plain; charset=UTF-8\r\n`
-  
+  let email = `From: ${fromEmail}\r\nTo: ${to}\r\nSubject: =?UTF-8?B?${Buffer.from(subject).toString('base64')}?=\r\nContent-Type: text/plain; charset=UTF-8\r\n`
+
   if (cc) email += `Cc: ${cc}\r\n`
   if (bcc) email += `Bcc: ${bcc}\r\n`
   if (inReplyTo) email += `In-Reply-To: ${inReplyTo}\r\n`
   if (references) email += `References: ${references}\r\n`
-  
+
   email += `\r\n${body}`
-  
+
   return Buffer.from(email).toString('base64url')
 }
 
@@ -131,7 +137,9 @@ export async function executeGmailTool(
   name: string,
   args: Record<string, unknown> | undefined
 ): Promise<{ content: Array<{ type: string; text: string }>; isError?: boolean }> {
-  const gmail = getGmailClient()
+  const userEmail = args?.user_email as string | undefined
+  const gmail = getGmailClientForUser(userEmail)
+  const resolvedUser = getImpersonatedUser(userEmail)
   const userId = 'me'
 
   try {
@@ -230,7 +238,7 @@ export async function executeGmailTool(
           throw new Error('to, subject, and body are required')
         }
 
-        const raw = encodeEmail(to, subject, body, cc, bcc)
+        const raw = encodeEmail(to, subject, body, resolvedUser, cc, bcc)
 
         const response = await gmail.users.messages.send({
           userId,
@@ -290,7 +298,7 @@ export async function executeGmailTool(
         const toMatch = originalFrom.match(/<([^>]+)>/)
         const to = toMatch ? toMatch[1] : originalFrom
 
-        const raw = encodeReplyEmail(to, replySubject, body, originalMessageId, references, cc, bcc)
+        const raw = encodeReplyEmail(to, replySubject, body, originalMessageId, references, resolvedUser, cc, bcc)
 
         const response = await gmail.users.messages.send({
           userId,

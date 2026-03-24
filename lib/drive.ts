@@ -1,5 +1,5 @@
 import { Tool } from '@modelcontextprotocol/sdk/types.js'
-import { getDriveClient, getDriveWriteClient } from './google-client.js'
+import { getDriveClientForUser, getDriveWriteClientForUser } from './google-client.js'
 import { Readable } from 'stream'
 
 // Drive tool definitions
@@ -13,6 +13,7 @@ export const driveTools: Tool[] = [
         folder_id: { type: 'string', description: 'フォルダID（デフォルト: マイドライブのルート）' },
         max_results: { type: 'number', description: '取得件数（デフォルト: 20）', default: 20 },
         order_by: { type: 'string', description: 'ソート順（例: "modifiedTime desc", "name"）' },
+        user_email: { type: 'string', description: 'アクセス対象のメールアドレス（@nocall.aiドメイン限定）。省略時は hayashi@nocall.ai' },
       },
     },
   },
@@ -25,6 +26,7 @@ export const driveTools: Tool[] = [
         query: { type: 'string', description: '検索クエリ（例: "name contains \'報告書\'"）' },
         max_results: { type: 'number', description: '取得件数（デフォルト: 20）', default: 20 },
         mime_type: { type: 'string', description: 'MIMEタイプでフィルタ（例: "application/pdf"）' },
+        user_email: { type: 'string', description: 'アクセス対象のメールアドレス（@nocall.aiドメイン限定）。省略時は hayashi@nocall.ai' },
       },
       required: ['query'],
     },
@@ -36,17 +38,19 @@ export const driveTools: Tool[] = [
       type: 'object',
       properties: {
         file_id: { type: 'string', description: 'ファイルID' },
+        user_email: { type: 'string', description: 'アクセス対象のメールアドレス（@nocall.aiドメイン限定）。省略時は hayashi@nocall.ai' },
       },
       required: ['file_id'],
     },
   },
   {
     name: 'google_drive_get_content',
-    description: 'テキストファイルの内容を取得します（Google DocsはプレーンテキストでエクスポートR）。',
+    description: 'テキストファイルの内容を取得します（Google Docsはプレーンテキストでエクスポート）。',
     inputSchema: {
       type: 'object',
       properties: {
         file_id: { type: 'string', description: 'ファイルID' },
+        user_email: { type: 'string', description: 'アクセス対象のメールアドレス（@nocall.aiドメイン限定）。省略時は hayashi@nocall.ai' },
       },
       required: ['file_id'],
     },
@@ -83,7 +87,8 @@ export async function executeDriveTool(
   name: string,
   args: Record<string, unknown> | undefined
 ): Promise<{ content: Array<{ type: string; text: string }>; isError?: boolean }> {
-  const drive = getDriveClient()
+  const userEmail = args?.user_email as string | undefined
+  const drive = getDriveClientForUser(userEmail)
 
   try {
     switch (name) {
@@ -269,7 +274,7 @@ export async function executeDriveTool(
         if (!folderId) throw new Error('folder_id is required')
 
         // Use write client for uploads
-        const driveWrite = getDriveWriteClient()
+        const driveWrite = getDriveWriteClientForUser(userEmail)
 
         // Download file from URL
         const headers: Record<string, string> = {}
