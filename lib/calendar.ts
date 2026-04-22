@@ -133,6 +133,7 @@ export async function executeCalendarTool(
           参加者: event.attendees?.map((a) => a.email) || [],
           作成者: event.creator?.email || '',
           ステータス: event.status || '',
+          eventType: event.eventType || 'default',
         })) || []
 
         return {
@@ -164,6 +165,7 @@ export async function executeCalendarTool(
               ステータス: event.status || '',
               リンク: event.htmlLink || '',
               Meet: event.hangoutLink || '',
+              eventType: event.eventType || 'default',
             }, null, 2),
           }],
         }
