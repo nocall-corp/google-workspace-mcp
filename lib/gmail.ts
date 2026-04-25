@@ -1,6 +1,24 @@
 import { Tool } from '@modelcontextprotocol/sdk/types.js'
 import { getGmailClientForUser, getDriveClientForUser, getImpersonatedUser } from './google-client.js'
 
+const ALLOWED_GMAIL_USERS = new Set(
+  (process.env.GMAIL_ALLOWED_USERS || 'hayashi@nocall.ai')
+    .split(',')
+    .map((s) => s.trim().toLowerCase())
+    .filter(Boolean)
+)
+
+function assertGmailUserAllowed(userEmail: string): void {
+  if (!ALLOWED_GMAIL_USERS.has(userEmail.toLowerCase())) {
+    throw new Error(
+      `Gmailアクセスが許可されていないユーザー: ${userEmail}. ` +
+      `セキュリティ上、依頼してきたユーザー本人のメールアドレスのみアクセスできます。` +
+      `他のユーザーのメールが必要な場合は、本人から依頼してもらってください。` +
+      `（管理者: GMAIL_ALLOWED_USERS env で許可リスト変更可能）`
+    )
+  }
+}
+
 // Gmail tool definitions
 export const gmailTools: Tool[] = [
   {
@@ -307,11 +325,14 @@ export async function executeGmailTool(
   args: Record<string, unknown> | undefined
 ): Promise<{ content: Array<{ type: string; text: string }>; isError?: boolean }> {
   const userEmail = args?.user_email as string | undefined
-  const gmail = getGmailClientForUser(userEmail)
   const resolvedUser = getImpersonatedUser(userEmail)
-  const userId = 'me'
 
   try {
+    assertGmailUserAllowed(resolvedUser)
+
+    const gmail = getGmailClientForUser(userEmail)
+    const userId = 'me'
+
     switch (name) {
       case 'google_gmail_search': {
         const query = args?.query as string
