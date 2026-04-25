@@ -1,22 +1,30 @@
 import { Tool } from '@modelcontextprotocol/sdk/types.js'
 import { getGmailClientForUser, getDriveClientForUser, getImpersonatedUser } from './google-client.js'
 
-const ALLOWED_GMAIL_USERS = new Set(
-  (process.env.GMAIL_ALLOWED_USERS || 'hayashi@nocall.ai')
+const GMAIL_ALLOWED_DOMAINS = new Set(
+  (process.env.GMAIL_ALLOWED_DOMAINS || 'nocall.ai')
+    .split(',')
+    .map((s) => s.trim().toLowerCase())
+    .filter(Boolean)
+)
+
+const GMAIL_EXTRA_ALLOWED_USERS = new Set(
+  (process.env.GMAIL_ALLOWED_USERS || '')
     .split(',')
     .map((s) => s.trim().toLowerCase())
     .filter(Boolean)
 )
 
 function assertGmailUserAllowed(userEmail: string): void {
-  if (!ALLOWED_GMAIL_USERS.has(userEmail.toLowerCase())) {
-    throw new Error(
-      `Gmailアクセスが許可されていないユーザー: ${userEmail}. ` +
-      `セキュリティ上、依頼してきたユーザー本人のメールアドレスのみアクセスできます。` +
-      `他のユーザーのメールが必要な場合は、本人から依頼してもらってください。` +
-      `（管理者: GMAIL_ALLOWED_USERS env で許可リスト変更可能）`
-    )
-  }
+  const lower = userEmail.toLowerCase()
+  if (GMAIL_EXTRA_ALLOWED_USERS.has(lower)) return
+  const domain = lower.split('@')[1]
+  if (domain && GMAIL_ALLOWED_DOMAINS.has(domain)) return
+  throw new Error(
+    `Gmailアクセスが許可されていないユーザー: ${userEmail}. ` +
+    `許可ドメイン: ${[...GMAIL_ALLOWED_DOMAINS].join(', ')}. ` +
+    `（管理者: GMAIL_ALLOWED_DOMAINS / GMAIL_ALLOWED_USERS env で変更可能）`
+  )
 }
 
 // Gmail tool definitions
