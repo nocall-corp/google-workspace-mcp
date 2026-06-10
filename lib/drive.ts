@@ -9,17 +9,40 @@ const BLOCKED_DRIVE_IDS = new Set(
     .filter(Boolean)
 )
 
-function isBlockedDriveId(driveId: string | null | undefined): boolean {
-  return !!driveId && BLOCKED_DRIVE_IDS.has(driveId)
+const DEFAULT_USER = process.env.GOOGLE_DEFAULT_USER || process.env.GOOGLE_DELEGATED_USER || 'hayashi@nocall.ai'
+
+// 機密ドライブのブロックを免除されるメールアドレス（林さんのみ）
+const BLOCKED_DRIVE_ALLOWED_EMAILS = new Set(
+  (process.env.BLOCKED_DRIVE_ALLOWED_EMAILS || 'hayashi@nocall.ai')
+    .split(',')
+    .map((s) => s.trim().toLowerCase())
+    .filter(Boolean)
+)
+
+function isAllowedUser(userEmail: string | null | undefined): boolean {
+  const resolved = (userEmail || DEFAULT_USER).trim().toLowerCase()
+  return BLOCKED_DRIVE_ALLOWED_EMAILS.has(resolved)
 }
 
-async function assertFileNotBlocked(drive: any, fileId: string): Promise<void> {
+function isBlockedDriveId(
+  driveId: string | null | undefined,
+  userEmail?: string | null
+): boolean {
+  if (!driveId || !BLOCKED_DRIVE_IDS.has(driveId)) return false
+  return !isAllowedUser(userEmail)
+}
+
+async function assertFileNotBlocked(
+  drive: any,
+  fileId: string,
+  userEmail?: string | null
+): Promise<void> {
   const meta = await drive.files.get({
     fileId,
     supportsAllDrives: true,
     fields: 'id, driveId, parents',
   })
-  if (isBlockedDriveId(meta.data.driveId)) {
+  if (isBlockedDriveId(meta.data.driveId, userEmail)) {
     throw new Error('このファイルは機密情報ドライブに属しているためアクセスできません')
   }
 }
@@ -146,7 +169,7 @@ export async function executeDriveTool(
         const orderBy = (args?.order_by as string) || 'modifiedTime desc'
 
         if (folderId) {
-          await assertFileNotBlocked(drive, folderId)
+          await assertFileNotBlocked(drive, folderId, userEmail)
         }
 
         let query = 'trashed = false'
@@ -164,7 +187,7 @@ export async function executeDriveTool(
           fields: 'files(id, name, mimeType, size, modifiedTime, createdTime, webViewLink, owners, driveId)',
         })
 
-        const files = response.data.files?.filter((f) => !isBlockedDriveId(f.driveId)).map((file) => ({
+        const files = response.data.files?.filter((f) => !isBlockedDriveId(f.driveId, userEmail)).map((file) => ({
           id: file.id,
           名前: file.name,
           タイプ: file.mimeType?.includes('folder') ? 'フォルダ' : 'ファイル',
@@ -204,7 +227,7 @@ export async function executeDriveTool(
           fields: 'files(id, name, mimeType, size, modifiedTime, createdTime, webViewLink, owners, driveId)',
         })
 
-        const files = response.data.files?.filter((f) => !isBlockedDriveId(f.driveId)).map((file) => ({
+        const files = response.data.files?.filter((f) => !isBlockedDriveId(f.driveId, userEmail)).map((file) => ({
           id: file.id,
           名前: file.name,
           タイプ: file.mimeType?.includes('folder') ? 'フォルダ' : 'ファイル',
@@ -232,7 +255,7 @@ export async function executeDriveTool(
         })
 
         const file = response.data
-        if (isBlockedDriveId(file.driveId)) {
+        if (isBlockedDriveId(file.driveId, userEmail)) {
           throw new Error('このファイルは機密情報ドライブに属しているためアクセスできません')
         }
 
@@ -272,7 +295,7 @@ export async function executeDriveTool(
           fields: 'id, name, mimeType, driveId',
         })
 
-        if (isBlockedDriveId(metadata.data.driveId)) {
+        if (isBlockedDriveId(metadata.data.driveId, userEmail)) {
           throw new Error('このファイルは機密情報ドライブに属しているためアクセスできません')
         }
 
@@ -334,7 +357,7 @@ export async function executeDriveTool(
         if (!email) throw new Error('email is required')
         if (!role) throw new Error('role is required')
 
-        await assertFileNotBlocked(drive, fileId)
+        await assertFileNotBlocked(drive, fileId, userEmail)
 
         const driveWrite = getDriveWriteClientForUser(userEmail)
 
@@ -373,7 +396,7 @@ export async function executeDriveTool(
           fields: 'drives(id, name, createdTime, capabilities)',
         })
 
-        const drives = response.data.drives?.filter((d) => !isBlockedDriveId(d.id)).map((d) => ({
+        const drives = response.data.drives?.filter((d) => !isBlockedDriveId(d.id, userEmail)).map((d) => ({
           id: d.id,
           名前: d.name,
           作成日時: d.createdTime,
@@ -396,7 +419,7 @@ export async function executeDriveTool(
         if (!fileName) throw new Error('file_name is required')
         if (!folderId) throw new Error('folder_id is required')
 
-        await assertFileNotBlocked(drive, folderId)
+        await assertFileNotBlocked(drive, folderId, userEmail)
 
         // Use write client for uploads
         const driveWrite = getDriveWriteClientForUser(userEmail)
