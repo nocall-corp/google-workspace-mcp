@@ -128,7 +128,7 @@ export const driveTools: Tool[] = [
   },
   {
     name: 'google_drive_upload_file',
-    description: 'URLからファイルをダウンロードしてGoogle Driveにアップロードします。SlackファイルURLやその他のHTTPアクセス可能なURLに対応。',
+    description: 'URLからファイルをダウンロードしてGoogle Driveにアップロードします。PowerPointはGoogleスライドへ変換できます。',
     inputSchema: {
       type: 'object',
       properties: {
@@ -137,6 +137,8 @@ export const driveTools: Tool[] = [
         folder_id: { type: 'string', description: 'アップロード先のGoogle DriveフォルダID' },
         mime_type: { type: 'string', description: 'ファイルのMIMEタイプ（省略時は自動判定）' },
         auth_header: { type: 'string', description: '認証ヘッダー（例: "Bearer xoxb-xxx"）。SlackファイルURLの場合に必要' },
+        convert_to_google_slides: { type: 'boolean', description: 'PowerPointをGoogleスライドへ変換する（デフォルト: false）', default: false },
+        user_email: { type: 'string', description: 'アップロードを実行するメールアドレス（@nocall.aiドメイン限定）。省略時は hayashi@nocall.ai' },
       },
       required: ['source_url', 'file_name', 'folder_id'],
     },
@@ -414,6 +416,7 @@ export async function executeDriveTool(
         const folderId = args?.folder_id as string
         const mimeType = args?.mime_type as string | undefined
         const authHeader = args?.auth_header as string | undefined
+        const convertToGoogleSlides = (args?.convert_to_google_slides as boolean | undefined) ?? false
 
         if (!sourceUrl) throw new Error('source_url is required')
         if (!fileName) throw new Error('file_name is required')
@@ -444,13 +447,14 @@ export async function executeDriveTool(
           requestBody: {
             name: fileName,
             parents: [folderId],
+            ...(convertToGoogleSlides ? { mimeType: 'application/vnd.google-apps.presentation' } : {}),
           },
           media: {
             mimeType: contentType,
             body: Readable.from(buffer),
           },
           supportsAllDrives: true,
-          fields: 'id, name, mimeType, size, webViewLink',
+          fields: 'id, name, mimeType, size, webViewLink, parents, driveId, capabilities(canEdit)',
         })
 
         const uploadedFile = uploadResponse.data
@@ -466,6 +470,9 @@ export async function executeDriveTool(
                 MIMEタイプ: uploadedFile.mimeType,
                 サイズ: formatFileSize(uploadedFile.size),
                 リンク: uploadedFile.webViewLink,
+                親フォルダ: uploadedFile.parents,
+                共有ドライブID: uploadedFile.driveId,
+                編集可能: uploadedFile.capabilities?.canEdit ?? false,
               },
             }, null, 2),
           }],
