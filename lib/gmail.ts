@@ -1,4 +1,5 @@
 import { Tool } from '@modelcontextprotocol/sdk/types.js'
+import type { gmail_v1 } from 'googleapis'
 import { getGmailClientForUser, getDriveClientForUser, getImpersonatedUser } from './google-client.js'
 
 const GMAIL_ALLOWED_DOMAINS = new Set(
@@ -25,6 +26,47 @@ function assertGmailUserAllowed(userEmail: string): void {
     `許可ドメイン: ${[...GMAIL_ALLOWED_DOMAINS].join(', ')}. ` +
     `（管理者: GMAIL_ALLOWED_DOMAINS / GMAIL_ALLOWED_USERS env で変更可能）`
   )
+}
+
+function htmlToPlainText(html: string): string {
+  return html
+    .replace(/<style\b[^>]*>[\s\S]*?<\/style>/gi, '')
+    .replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, '')
+    .replace(/<br\s*\/?\s*>/gi, '\n')
+    .replace(/<\/p\s*>/gi, '\n')
+    .replace(/<\/div\s*>/gi, '\n')
+    .replace(/<[^>]+>/g, '')
+    .replace(/&nbsp;/gi, ' ')
+    .replace(/&amp;/gi, '&')
+    .replace(/&lt;/gi, '<')
+    .replace(/&gt;/gi, '>')
+    .replace(/&quot;/gi, '"')
+    .replace(/&#39;/gi, "'")
+    .replace(/\n{3,}/g, '\n\n')
+    .trim()
+}
+
+function extractMessageBody(payload?: gmail_v1.Schema$MessagePart): string {
+  if (!payload) return ''
+
+  const plainParts: string[] = []
+  const htmlParts: string[] = []
+
+  const visit = (part: gmail_v1.Schema$MessagePart): void => {
+    const data = part.body?.data
+    if (data) {
+      const decoded = decodeBase64Url(data)
+      if (part.mimeType === 'text/plain') plainParts.push(decoded)
+      else if (part.mimeType === 'text/html') htmlParts.push(decoded)
+      else if (!part.parts?.length && !part.filename) plainParts.push(decoded)
+    }
+    for (const child of part.parts || []) visit(child)
+  }
+
+  visit(payload)
+  const plain = plainParts.map((part) => part.trim()).filter(Boolean).join('\n\n')
+  if (plain) return plain
+  return htmlParts.map(htmlToPlainText).filter(Boolean).join('\n\n')
 }
 
 // Gmail tool definitions
@@ -394,17 +436,8 @@ export async function executeGmailTool(
 
         const headers = response.data.payload?.headers || []
         
-        // Extract body
-        let body = ''
         const payload = response.data.payload
-        if (payload?.body?.data) {
-          body = decodeBase64Url(payload.body.data)
-        } else if (payload?.parts) {
-          const textPart = payload.parts.find((p) => p.mimeType === 'text/plain')
-          if (textPart?.body?.data) {
-            body = decodeBase64Url(textPart.body.data)
-          }
-        }
+        const body = extractMessageBody(payload)
 
         return {
           content: [{
