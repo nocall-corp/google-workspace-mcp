@@ -131,6 +131,9 @@ export async function executeCalendarTool(
           場所: event.location || '',
           説明: event.description || '',
           参加者: event.attendees?.map((a) => a.email) || [],
+          // 本人（アクセス対象アカウント）の出席状況: accepted / declined / tentative / needsAction。
+          // 招待されていない（参加者欄なし・自分用ブロック）場合は空文字。
+          自分の出席状況: event.attendees?.find((a) => a.self)?.responseStatus || '',
           作成者: event.creator?.email || '',
           ステータス: event.status || '',
           eventType: event.eventType || 'default',
