@@ -1,6 +1,7 @@
 import { Tool } from '@modelcontextprotocol/sdk/types.js'
 import type { gmail_v1 } from 'googleapis'
 import { getGmailClientForUser, getDriveClientForUser, getImpersonatedUser } from './google-client.js'
+import { isBlockedDriveId, BLOCKED_MESSAGE } from './confidential-drive.js'
 
 const GMAIL_ALLOWED_DOMAINS = new Set(
   (process.env.GMAIL_ALLOWED_DOMAINS || 'nocall.ai')
@@ -292,9 +293,12 @@ async function downloadDriveFile(fileId: string, userEmail?: string, customFilen
 
   const fileMeta = await drive.files.get({
     fileId,
-    fields: 'name,mimeType',
+    fields: 'name,mimeType,driveId',
     supportsAllDrives: true,
   })
+  if (isBlockedDriveId(fileMeta.data.driveId, userEmail)) {
+    throw new Error(BLOCKED_MESSAGE)
+  }
 
   const originalMimeType = fileMeta.data.mimeType || 'application/octet-stream'
   const originalName = fileMeta.data.name || 'attachment'

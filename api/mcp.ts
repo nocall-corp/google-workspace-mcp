@@ -9,6 +9,7 @@ import { Transport } from '@modelcontextprotocol/sdk/shared/transport.js'
 import { calendarTools, executeCalendarTool } from '../lib/calendar.js'
 import { gmailTools, executeGmailTool } from '../lib/gmail.js'
 import { driveTools, executeDriveTool } from '../lib/drive.js'
+import { REQUESTER_HEADER, runWithRequester, verifyRequesterToken } from '../lib/confidential-drive.js'
 // Tasks removed: Claude API rejects oneOf/allOf schemas & tasks not used (Notion todo preferred)
 
 // Auth configuration
@@ -133,7 +134,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   // CORS headers
   res.setHeader('Access-Control-Allow-Origin', '*')
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, DELETE, OPTIONS')
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, mcp-session-id')
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, mcp-session-id, X-Nokoru-Requester')
 
   if (req.method === 'OPTIONS') {
     res.status(200).end()
@@ -150,9 +151,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         sessionIdGenerator: undefined,
       })
 
+      const requesterHeader = req.headers[REQUESTER_HEADER]
+      const requester = verifyRequesterToken(Array.isArray(requesterHeader) ? requesterHeader[0] : requesterHeader)
       const mcpServer = new GoogleWorkspaceMCPServer()
       await mcpServer.connect(transport)
-      await transport.handleRequest(req as any, res as any, req.body)
+      await runWithRequester(requester, () => transport.handleRequest(req as any, res as any, req.body))
     } else if (req.method === 'GET') {
       // SSE streaming not supported in stateless mode
       res.status(405).json({

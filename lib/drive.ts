@@ -1,51 +1,7 @@
 import { Tool } from '@modelcontextprotocol/sdk/types.js'
 import { getDriveClientForUser, getDriveWriteClientForUser } from './google-client.js'
 import { Readable } from 'stream'
-
-const BLOCKED_DRIVE_IDS = new Set(
-  (process.env.BLOCKED_DRIVE_IDS || '0AB7-vkCNPC-3Uk9PVA')
-    .split(',')
-    .map((s) => s.trim())
-    .filter(Boolean)
-)
-
-const DEFAULT_USER = process.env.GOOGLE_DEFAULT_USER || process.env.GOOGLE_DELEGATED_USER || 'hayashi@nocall.ai'
-
-// 機密ドライブのブロックを免除されるメールアドレス（林さんのみ）
-const BLOCKED_DRIVE_ALLOWED_EMAILS = new Set(
-  (process.env.BLOCKED_DRIVE_ALLOWED_EMAILS || 'hayashi@nocall.ai')
-    .split(',')
-    .map((s) => s.trim().toLowerCase())
-    .filter(Boolean)
-)
-
-function isAllowedUser(userEmail: string | null | undefined): boolean {
-  const resolved = (userEmail || DEFAULT_USER).trim().toLowerCase()
-  return BLOCKED_DRIVE_ALLOWED_EMAILS.has(resolved)
-}
-
-function isBlockedDriveId(
-  driveId: string | null | undefined,
-  userEmail?: string | null
-): boolean {
-  if (!driveId || !BLOCKED_DRIVE_IDS.has(driveId)) return false
-  return !isAllowedUser(userEmail)
-}
-
-async function assertFileNotBlocked(
-  drive: any,
-  fileId: string,
-  userEmail?: string | null
-): Promise<void> {
-  const meta = await drive.files.get({
-    fileId,
-    supportsAllDrives: true,
-    fields: 'id, driveId, parents',
-  })
-  if (isBlockedDriveId(meta.data.driveId, userEmail)) {
-    throw new Error('このファイルは機密情報ドライブに属しているためアクセスできません')
-  }
-}
+import { assertFileNotBlocked, isBlockedDriveId, BLOCKED_MESSAGE } from './confidential-drive.js'
 
 // Drive tool definitions
 export const driveTools: Tool[] = [
@@ -258,7 +214,7 @@ export async function executeDriveTool(
 
         const file = response.data
         if (isBlockedDriveId(file.driveId, userEmail)) {
-          throw new Error('このファイルは機密情報ドライブに属しているためアクセスできません')
+          throw new Error(BLOCKED_MESSAGE)
         }
 
         return {
@@ -298,7 +254,7 @@ export async function executeDriveTool(
         })
 
         if (isBlockedDriveId(metadata.data.driveId, userEmail)) {
-          throw new Error('このファイルは機密情報ドライブに属しているためアクセスできません')
+          throw new Error(BLOCKED_MESSAGE)
         }
 
         const mimeType = metadata.data.mimeType
