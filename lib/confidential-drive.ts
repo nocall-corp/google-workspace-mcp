@@ -41,6 +41,7 @@ export function verifyRequesterToken(token: string | null | undefined, nowSec = 
   if (!payload || !sig) return null
   const expected = createHmac('sha256', SIGNING_SECRET).update(payload).digest()
   const given = Buffer.from(sig, 'base64url')
+  if (given.toString('base64url') !== sig) return null
   if (given.length !== expected.length || !timingSafeEqual(given, expected)) return null
   try {
     const data = JSON.parse(Buffer.from(payload, 'base64url').toString('utf-8')) as { e?: unknown; x?: unknown }
