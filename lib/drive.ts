@@ -83,6 +83,19 @@ export const driveTools: Tool[] = [
     },
   },
   {
+    name: 'google_drive_create_folder',
+    description: '指定した親フォルダの中に新しいフォルダを作成します。同名フォルダが既にある場合は作成せずそのフォルダを返します。',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        name: { type: 'string', description: '作成するフォルダ名' },
+        parent_folder_id: { type: 'string', description: '親フォルダのID' },
+        user_email: { type: 'string', description: '作成を実行するメールアドレス（@nocall.aiドメイン限定）。省略時は hayashi@nocall.ai' },
+      },
+      required: ['name', 'parent_folder_id'],
+    },
+  },
+  {
     name: 'google_drive_upload_file',
     description: 'URLからファイルをダウンロードしてGoogle Driveにアップロードします。PowerPointはGoogleスライドへ変換できます。',
     inputSchema: {
@@ -363,6 +376,66 @@ export async function executeDriveTool(
 
         return {
           content: [{ type: 'text', text: JSON.stringify({ 総件数: drives.length, 共有ドライブ: drives }, null, 2) }],
+        }
+      }
+
+      case 'google_drive_create_folder': {
+        const folderName = args?.name as string
+        const parentId = args?.parent_folder_id as string
+
+        if (!folderName) throw new Error('name is required')
+        if (!parentId) throw new Error('parent_folder_id is required')
+
+        await assertFileNotBlocked(drive, parentId, userEmail)
+
+        const escapedName = folderName.replace(/\\/g, '\\\\').replace(/'/g, "\\'")
+        const existing = await drive.files.list({
+          q: `trashed = false and mimeType = 'application/vnd.google-apps.folder' and '${parentId}' in parents and name = '${escapedName}'`,
+          pageSize: 1,
+          supportsAllDrives: true,
+          includeItemsFromAllDrives: true,
+          fields: 'files(id, name, webViewLink, parents, driveId)',
+        })
+        const found = existing.data.files?.[0]
+        if (found) {
+          return {
+            content: [{
+              type: 'text',
+              text: JSON.stringify({
+                成功: true,
+                既存: true,
+                フォルダ: { id: found.id, 名前: found.name, リンク: found.webViewLink, 親フォルダ: found.parents, 共有ドライブID: found.driveId },
+              }, null, 2),
+            }],
+          }
+        }
+
+        const driveWrite = getDriveWriteClientForUser(userEmail)
+        const created = await driveWrite.files.create({
+          requestBody: {
+            name: folderName,
+            mimeType: 'application/vnd.google-apps.folder',
+            parents: [parentId],
+          },
+          supportsAllDrives: true,
+          fields: 'id, name, webViewLink, parents, driveId',
+        })
+
+        return {
+          content: [{
+            type: 'text',
+            text: JSON.stringify({
+              成功: true,
+              既存: false,
+              フォルダ: {
+                id: created.data.id,
+                名前: created.data.name,
+                リンク: created.data.webViewLink,
+                親フォルダ: created.data.parents,
+                共有ドライブID: created.data.driveId,
+              },
+            }, null, 2),
+          }],
         }
       }
 
