@@ -4,6 +4,17 @@ import type { calendar_v3, gmail_v1, drive_v3, tasks_v1 } from 'googleapis'
 const ALLOWED_DOMAIN = process.env.GOOGLE_ALLOWED_DOMAIN || 'nocall.ai'
 const DEFAULT_USER = process.env.GOOGLE_DEFAULT_USER || process.env.GOOGLE_DELEGATED_USER || 'hayashi@nocall.ai'
 
+// ノコルから読ませない受信箱（2026-10-31 林さん指示「メールも読めないようにしましょう」）。
+// Google管理画面で成り代わり権限からGmailを外すまでの、こちら側での止め。
+const GMAIL_BLOCKED_MAILBOXES = (process.env.GMAIL_BLOCKED_MAILBOXES || 'hayashi@nocall.ai,abe@nocall.ai')
+  .split(',').map((s) => s.trim().toLowerCase()).filter(Boolean)
+
+function assertGmailAllowed(userEmail: string): void {
+  if (GMAIL_BLOCKED_MAILBOXES.includes(userEmail.toLowerCase())) {
+    throw new Error(`${userEmail} のメールはノコルから読み書きできない設定です（2026-10-31 林さん指示）。user_email に本人ごとに許可された受信箱を指定してください`)
+  }
+}
+
 // Service account key from environment variable (JSON string)
 function getServiceAccountKey(): object {
   const keyJson = process.env.GOOGLE_SERVICE_ACCOUNT_KEY
@@ -60,6 +71,7 @@ export function getCalendarClientForUser(userEmail?: string): calendar_v3.Calend
 
 // Gmail API client
 export function getGmailClient(): gmail_v1.Gmail {
+  assertGmailAllowed(DEFAULT_USER)
   const auth = createAuthClient([
     'https://www.googleapis.com/auth/gmail.modify',
     'https://www.googleapis.com/auth/gmail.send',
@@ -70,6 +82,7 @@ export function getGmailClient(): gmail_v1.Gmail {
 // Gmail API client for a specific user
 export function getGmailClientForUser(userEmail?: string): gmail_v1.Gmail {
   const resolvedUser = resolveUserEmail(userEmail)
+  assertGmailAllowed(resolvedUser)
   const auth = createAuthClient([
     'https://www.googleapis.com/auth/gmail.modify',
     'https://www.googleapis.com/auth/gmail.send',
