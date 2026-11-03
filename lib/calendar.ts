@@ -44,6 +44,7 @@ export const calendarTools: Tool[] = [
         start_time: { type: 'string', description: '開始日時（ISO8601形式）' },
         end_time: { type: 'string', description: '終了日時（ISO8601形式）' },
         attendees: { type: 'array', items: { type: 'string' }, description: '参加者のメールアドレス配列' },
+        recurrence: { type: 'array', items: { type: 'string' }, description: '繰り返しルール（RFC5545形式のRRULE配列。例: ["RRULE:FREQ=WEEKLY;BYDAY=MO"]、終了日付きは ["RRULE:FREQ=WEEKLY;BYDAY=MO;UNTIL=20261231T000000Z"]）。更新時に省略すると既存の繰り返しを維持する' },
         send_notifications: { type: 'boolean', description: '参加者に通知を送信するか（デフォルト: true）' },
         user_email: { type: 'string', description: 'アクセス対象のメールアドレス（@nocall.aiドメイン限定）。省略時は hayashi@nocall.ai' },
       },
@@ -64,6 +65,7 @@ export const calendarTools: Tool[] = [
         start_time: { type: 'string', description: '開始日時（ISO8601形式）' },
         end_time: { type: 'string', description: '終了日時（ISO8601形式）' },
         attendees: { type: 'array', items: { type: 'string' }, description: '参加者のメールアドレス配列' },
+        recurrence: { type: 'array', items: { type: 'string' }, description: '繰り返しルール（RFC5545形式のRRULE配列。例: ["RRULE:FREQ=WEEKLY;BYDAY=MO"]、終了日付きは ["RRULE:FREQ=WEEKLY;BYDAY=MO;UNTIL=20261231T000000Z"]）。更新時に省略すると既存の繰り返しを維持する' },
         user_email: { type: 'string', description: 'アクセス対象のメールアドレス（@nocall.aiドメイン限定）。省略時は hayashi@nocall.ai' },
       },
       required: ['event_id'],
@@ -166,6 +168,8 @@ export async function executeCalendarTool(
               作成者: event.creator?.email || '',
               主催者: event.organizer?.email || '',
               ステータス: event.status || '',
+              繰り返し: event.recurrence || [],
+              繰り返し元イベントID: event.recurringEventId || '',
               リンク: event.htmlLink || '',
               Meet: event.hangoutLink || '',
               eventType: event.eventType || 'default',
@@ -182,6 +186,7 @@ export async function executeCalendarTool(
         const startTime = args?.start_time as string
         const endTime = args?.end_time as string
         const attendees = args?.attendees as string[] | undefined
+        const recurrence = args?.recurrence as string[] | undefined
         const sendNotifications = args?.send_notifications !== false
 
         if (!summary || !startTime || !endTime) {
@@ -198,6 +203,7 @@ export async function executeCalendarTool(
             start: { dateTime: startTime, timeZone: 'Asia/Tokyo' },
             end: { dateTime: endTime, timeZone: 'Asia/Tokyo' },
             attendees: attendees?.map((email) => ({ email })),
+            recurrence,
           },
         })
 
@@ -247,6 +253,14 @@ export async function executeCalendarTool(
           updateData.attendees = (args.attendees as string[]).map((email) => ({ email }))
         } else {
           updateData.attendees = existingData.attendees
+        }
+
+        // events.update は PUT のため、含めない項目は消える。繰り返しを落とさないよう既存値を引き継ぐ
+        const recurrence = args?.recurrence as string[] | undefined
+        if (recurrence) {
+          updateData.recurrence = recurrence
+        } else if (existingData.recurrence) {
+          updateData.recurrence = existingData.recurrence
         }
 
         const response = await calendar.events.update({
