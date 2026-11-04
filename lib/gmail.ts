@@ -29,6 +29,20 @@ function assertGmailUserAllowed(userEmail: string): void {
   )
 }
 
+// Googleグループ宛のアドレス（recruit@等）はメールボックスが無く成り代われないため、
+// 実在ユーザー（noko@）で認証し、そのSend-Asエイリアスとして From に出す。許可リスト外は拒否する。
+const GMAIL_SEND_AS_ALLOWED = (process.env.GMAIL_SEND_AS_ALLOWED || 'recruit@nocall.ai')
+  .split(',').map((s) => s.trim().toLowerCase()).filter(Boolean)
+
+function resolveFromAddress(fromAddress: unknown, resolvedUser: string): string {
+  if (typeof fromAddress !== 'string' || !fromAddress.trim()) return resolvedUser
+  const from = fromAddress.trim().toLowerCase()
+  if (!GMAIL_SEND_AS_ALLOWED.includes(from)) {
+    throw new Error(`from_address ${fromAddress} は許可されていません。許可: ${GMAIL_SEND_AS_ALLOWED.join(', ')}`)
+  }
+  return from
+}
+
 function htmlToPlainText(html: string): string {
   return html
     .replace(/<style\b[^>]*>[\s\S]*?<\/style>/gi, '')
@@ -109,6 +123,7 @@ export const gmailTools: Tool[] = [
         cc: { type: 'string', description: 'CC（カンマ区切り）' },
         bcc: { type: 'string', description: 'BCC（カンマ区切り）' },
         user_email: { type: 'string', description: '送信元メールアドレス（@nocall.aiドメイン限定）。省略時は hayashi@nocall.ai' },
+        from_address: { type: 'string', description: 'From に表示するエイリアス（許可リストのみ。例: recruit@nocall.ai）。user_email には認証できる実ユーザー（例: noko@nocall.ai）を指定し、そのSend-Asに登録済みであること' },
         attachments: {
           type: 'array',
           description: 'Google Driveファイルの添付（ファイルIDまたはURL）',
@@ -136,6 +151,7 @@ export const gmailTools: Tool[] = [
         cc: { type: 'string', description: 'CC（カンマ区切り）' },
         bcc: { type: 'string', description: 'BCC（カンマ区切り）' },
         user_email: { type: 'string', description: '送信元メールアドレス（@nocall.aiドメイン限定）。省略時は hayashi@nocall.ai' },
+        from_address: { type: 'string', description: 'From に表示するエイリアス（許可リストのみ。例: recruit@nocall.ai）。user_email には認証できる実ユーザー（例: noko@nocall.ai）を指定し、そのSend-Asに登録済みであること' },
         attachments: {
           type: 'array',
           description: 'Google Driveファイルの添付（ファイルIDまたはURL）',
@@ -188,6 +204,7 @@ export const gmailTools: Tool[] = [
         cc: { type: 'string', description: 'CC（カンマ区切り）' },
         bcc: { type: 'string', description: 'BCC（カンマ区切り）' },
         user_email: { type: 'string', description: '送信元メールアドレス（@nocall.aiドメイン限定）。省略時は hayashi@nocall.ai' },
+        from_address: { type: 'string', description: 'From に表示するエイリアス（許可リストのみ。例: recruit@nocall.ai）。user_email には認証できる実ユーザー（例: noko@nocall.ai）を指定し、そのSend-Asに登録済みであること' },
         in_reply_to_message_id: { type: 'string', description: '返信元のメッセージID（返信の下書きを作る場合）' },
         attachments: {
           type: 'array',
@@ -383,6 +400,7 @@ export async function executeGmailTool(
 
   try {
     assertGmailUserAllowed(resolvedUser)
+    const fromEmail = resolveFromAddress(args?.from_address, resolvedUser)
 
     const gmail = getGmailClientForUser(userEmail)
     const userId = 'me'
@@ -486,9 +504,9 @@ export async function executeGmailTool(
             attachments.push(downloaded)
             attachedFiles.push(downloaded.filename)
           }
-          raw = encodeEmailWithAttachments(to, subject, body, attachments, resolvedUser, cc, bcc)
+          raw = encodeEmailWithAttachments(to, subject, body, attachments, fromEmail, cc, bcc)
         } else {
-          raw = encodeEmail(to, subject, body, resolvedUser, cc, bcc)
+          raw = encodeEmail(to, subject, body, fromEmail, cc, bcc)
         }
 
         const response = await gmail.users.messages.send({
@@ -560,9 +578,9 @@ export async function executeGmailTool(
             attachments.push(downloaded)
             replyAttachedFiles.push(downloaded.filename)
           }
-          raw = encodeEmailWithAttachments(to, replySubject, body, attachments, resolvedUser, cc, bcc, originalMessageId, references)
+          raw = encodeEmailWithAttachments(to, replySubject, body, attachments, fromEmail, cc, bcc, originalMessageId, references)
         } else {
-          raw = encodeReplyEmail(to, replySubject, body, originalMessageId, references, resolvedUser, cc, bcc)
+          raw = encodeReplyEmail(to, replySubject, body, originalMessageId, references, fromEmail, cc, bcc)
         }
 
         const response = await gmail.users.messages.send({
@@ -681,15 +699,15 @@ export async function executeGmailTool(
             : origMessageId
 
           if (draftAttachments.length > 0) {
-            raw = encodeEmailWithAttachments(to, subject, body, draftAttachments, resolvedUser, cc, bcc, origMessageId, refs)
+            raw = encodeEmailWithAttachments(to, subject, body, draftAttachments, fromEmail, cc, bcc, origMessageId, refs)
           } else {
-            raw = encodeReplyEmail(to, subject, body, origMessageId, refs, resolvedUser, cc, bcc)
+            raw = encodeReplyEmail(to, subject, body, origMessageId, refs, fromEmail, cc, bcc)
           }
         } else {
           if (draftAttachments.length > 0) {
-            raw = encodeEmailWithAttachments(to, subject, body, draftAttachments, resolvedUser, cc, bcc)
+            raw = encodeEmailWithAttachments(to, subject, body, draftAttachments, fromEmail, cc, bcc)
           } else {
-            raw = encodeEmail(to, subject, body, resolvedUser, cc, bcc)
+            raw = encodeEmail(to, subject, body, fromEmail, cc, bcc)
           }
         }
 
