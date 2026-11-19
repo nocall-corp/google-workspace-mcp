@@ -97,7 +97,7 @@ export const driveTools: Tool[] = [
   },
   {
     name: 'google_drive_upload_file',
-    description: 'URLからファイルをダウンロードしてGoogle Driveにアップロードします。PowerPointはGoogleスライドへ変換できます。',
+    description: 'URLからファイルをダウンロードしてGoogle Driveにアップロードします。PowerPointはGoogleスライド、Word(docx)はGoogleドキュメントへ変換できます。',
     inputSchema: {
       type: 'object',
       properties: {
@@ -107,6 +107,7 @@ export const driveTools: Tool[] = [
         mime_type: { type: 'string', description: 'ファイルのMIMEタイプ（省略時は自動判定）' },
         auth_header: { type: 'string', description: '認証ヘッダー（例: "Bearer xoxb-xxx"）。SlackファイルURLの場合に必要' },
         convert_to_google_slides: { type: 'boolean', description: 'PowerPointをGoogleスライドへ変換する（デフォルト: false）', default: false },
+        convert_to_google_docs: { type: 'boolean', description: 'Word(docx)をGoogleドキュメントへ変換する（デフォルト: false）', default: false },
         user_email: { type: 'string', description: 'アップロードを実行するメールアドレス（@nocall.aiドメイン限定）。省略時は hayashi@nocall.ai' },
       },
       required: ['source_url', 'file_name', 'folder_id'],
@@ -446,6 +447,8 @@ export async function executeDriveTool(
         const mimeType = args?.mime_type as string | undefined
         const authHeader = args?.auth_header as string | undefined
         const convertToGoogleSlides = (args?.convert_to_google_slides as boolean | undefined) ?? false
+        const convertToGoogleDocs = (args?.convert_to_google_docs as boolean | undefined) ?? false
+        if (convertToGoogleSlides && convertToGoogleDocs) throw new Error('convert_to_google_slides と convert_to_google_docs は同時に指定できません')
 
         if (!sourceUrl) throw new Error('source_url is required')
         if (!fileName) throw new Error('file_name is required')
@@ -477,6 +480,7 @@ export async function executeDriveTool(
             name: fileName,
             parents: [folderId],
             ...(convertToGoogleSlides ? { mimeType: 'application/vnd.google-apps.presentation' } : {}),
+            ...(convertToGoogleDocs ? { mimeType: 'application/vnd.google-apps.document' } : {}),
           },
           media: {
             mimeType: contentType,
